@@ -27,30 +27,74 @@ target_version = "2.0.0"
 dep_graph = {
     "wasmer-types": set([]),
     "wasmer-derive": set([]),
-    "wasmer-vm": set(["wasmer-types"]),
-    "wasmer-compiler": set(["wasmer-vm", "wasmer-types"]),
-    "wasmer-object": set(["wasmer-types", "wasmer-compiler"]),
-    "wasmer-engine": set(["wasmer-types", "wasmer-vm", "wasmer-compiler"]),
-    "wasmer-compiler-singlepass": set(["wasmer-types", "wasmer-vm", "wasmer-compiler"]),
-    "wasmer-compiler-cranelift": set(["wasmer-types", "wasmer-vm", "wasmer-compiler"]),
-    "wasmer-compiler-llvm": set(["wasmer-types", "wasmer-vm", "wasmer-compiler"]),
-    "wasmer-engine-universal": set(["wasmer-types", "wasmer-vm", "wasmer-compiler", "wasmer-engine"]),
-    "wasmer-engine-dylib": set(["wasmer-types", "wasmer-vm", "wasmer-compiler", "wasmer-engine",
-                                 "wasmer-object"]),
-    "wasmer-engine-staticlib": set(["wasmer-types", "wasmer-vm", "wasmer-compiler", "wasmer-engine",
-                                      "wasmer-object"]),
-    "wasmer": set(["wasmer-vm", "wasmer-compiler-singlepass", "wasmer-compiler-cranelift",
-                   "wasmer-compiler-llvm", "wasmer-compiler", "wasmer-engine", "wasmer-engine-universal",
-                   "wasmer-engine-dylib", "wasmer-engine-staticlib", "wasmer-types", "wasmer-derive"]),
-    "wasmer-cache": set(["wasmer"]),
-    "wasmer-wasi": set(["wasmer", "wasmer-wasi-types"]),
-    "wasmer-wasi-types": set(["wasmer-types"]),
-    "wasmer-wasi-experimental-io-devices": set(["wasmer-wasi"]),
-    "wasmer-emscripten": set(["wasmer"]),
-    "wasmer-c-api": set(["wasmer", "wasmer-compiler", "wasmer-compiler-cranelift", "wasmer-compiler-singlepass",
-                         "wasmer-compiler-llvm", "wasmer-emscripten", "wasmer-engine", "wasmer-engine-universal",
-                         "wasmer-engine-dylib", "wasmer-engine-staticlib", "wasmer-wasi", "wasmer-types"]),
-    "wasmer-middlewares": set(["wasmer", "wasmer-types", "wasmer-vm"]),
+    "wasmer-vm": {"wasmer-types"},
+    "wasmer-compiler": {"wasmer-vm", "wasmer-types"},
+    "wasmer-object": {"wasmer-types", "wasmer-compiler"},
+    "wasmer-engine": {"wasmer-types", "wasmer-vm", "wasmer-compiler"},
+    "wasmer-compiler-singlepass": {
+        "wasmer-types",
+        "wasmer-vm",
+        "wasmer-compiler",
+    },
+    "wasmer-compiler-cranelift": {
+        "wasmer-types",
+        "wasmer-vm",
+        "wasmer-compiler",
+    },
+    "wasmer-compiler-llvm": {"wasmer-types", "wasmer-vm", "wasmer-compiler"},
+    "wasmer-engine-universal": {
+        "wasmer-types",
+        "wasmer-vm",
+        "wasmer-compiler",
+        "wasmer-engine",
+    },
+    "wasmer-engine-dylib": {
+        "wasmer-types",
+        "wasmer-vm",
+        "wasmer-compiler",
+        "wasmer-engine",
+        "wasmer-object",
+    },
+    "wasmer-engine-staticlib": {
+        "wasmer-types",
+        "wasmer-vm",
+        "wasmer-compiler",
+        "wasmer-engine",
+        "wasmer-object",
+    },
+    "wasmer": {
+        "wasmer-vm",
+        "wasmer-compiler-singlepass",
+        "wasmer-compiler-cranelift",
+        "wasmer-compiler-llvm",
+        "wasmer-compiler",
+        "wasmer-engine",
+        "wasmer-engine-universal",
+        "wasmer-engine-dylib",
+        "wasmer-engine-staticlib",
+        "wasmer-types",
+        "wasmer-derive",
+    },
+    "wasmer-cache": {"wasmer"},
+    "wasmer-wasi": {"wasmer", "wasmer-wasi-types"},
+    "wasmer-wasi-types": {"wasmer-types"},
+    "wasmer-wasi-experimental-io-devices": {"wasmer-wasi"},
+    "wasmer-emscripten": {"wasmer"},
+    "wasmer-c-api": {
+        "wasmer",
+        "wasmer-compiler",
+        "wasmer-compiler-cranelift",
+        "wasmer-compiler-singlepass",
+        "wasmer-compiler-llvm",
+        "wasmer-emscripten",
+        "wasmer-engine",
+        "wasmer-engine-universal",
+        "wasmer-engine-dylib",
+        "wasmer-engine-staticlib",
+        "wasmer-wasi",
+        "wasmer-types",
+    },
+    "wasmer-middlewares": {"wasmer", "wasmer-types", "wasmer-vm"},
 }
 
 # where each crate is located in the `lib` directory
@@ -83,30 +127,26 @@ no_dry_run = False
 
 def get_latest_version_for_crate(crate_name: str) -> Optional[str]:
     output = subprocess.run(["cargo", "search", crate_name], capture_output=True)
-    rexp_src = '^{} = "([^"]+)"'.format(crate_name)
+    rexp_src = f'^{crate_name} = "([^"]+)"'
     prog = re.compile(rexp_src)
     haystack = output.stdout.decode("utf-8")
     for line in haystack.splitlines():
-        result = prog.match(line)
-        if result:
-            return result.group(1)
+        if result := prog.match(line):
+            return result[1]
 
 def is_crate_already_published(crate_name: str) -> bool:
     found_string = get_latest_version_for_crate(crate_name)
-    if found_string is None:
-        return False
-
-    return target_version == found_string
+    return False if found_string is None else target_version == found_string
 
 def publish_crate(crate: str):
     starting_dir = os.getcwd()
-    os.chdir("lib/{}".format(location[crate]))
+    os.chdir(f"lib/{location[crate]}")
 
     global no_dry_run
     if no_dry_run:
         output = subprocess.run(["cargo", "publish"])
     else:
-        print("In dry-run: not publishing crate `{}`".format(crate))
+        print(f"In dry-run: not publishing crate `{crate}`")
 
     os.chdir(starting_dir)
 
@@ -124,11 +164,11 @@ def main():
     order = list(toposort_flatten(dep_graph, sort=True))
 
     for crate in order:
-        print("Publishing `{}`...".format(crate))
+        print(f"Publishing `{crate}`...")
         if not is_crate_already_published(crate):
             publish_crate(crate)
         else:
-            print("`{}` was already published!".format(crate))
+            print(f"`{crate}` was already published!")
             continue
         # sleep for 16 seconds between crates to ensure the crates.io index has time to update
         # this can be optimized with knowledge of our dep graph via toposort; we can even publish
